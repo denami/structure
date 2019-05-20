@@ -1,155 +1,143 @@
-// ConsoleApplication1.cpp : This file contains the 'main' function. Program execution begins and ends there.
-//
-
 #include <iostream>
-
 #include <windows.h> 
 #include <tlhelp32.h> 
 #include <tchar.h> 
 #include <stdio.h> 
 #include <string.h> 
-#include <vector> 
 
 using namespace std;
 
+#define MAX_LINES = 20;
 
 struct Item {
-//	int info;
 	DWORD PID; //PID process
 	DWORD PPID; //Parent PID process
-	std::string name; //Name of process
+	//std::wstring name;
+	std::string name;
+	int isPrinted = 0;
+
 	Item* next;
 };
 
+void displayMeny()
+{
 
 
-VOID PrintModuleList(HANDLE CONST hStdOut, DWORD CONST dwProcessId) {
-	MODULEENTRY32 meModuleEntry;
-	TCHAR szBuff[1024];
-	DWORD dwTemp;
-	HANDLE CONST hSnapshot = CreateToolhelp32Snapshot(
-		TH32CS_SNAPMODULE, dwProcessId);
-	if (INVALID_HANDLE_VALUE == hSnapshot) {
-		return;
-	}
 
-	meModuleEntry.dwSize = sizeof(MODULEENTRY32);
-	Module32First(hSnapshot, &meModuleEntry);
-	do {
-		wsprintf(szBuff, L"  ba: %08X, bs: %08X, %s\r\n",
-			meModuleEntry.modBaseAddr, meModuleEntry.modBaseSize,
-			meModuleEntry.szModule);
-		WriteConsole(hStdOut, szBuff, lstrlen(szBuff), &dwTemp, NULL);
-	} while (Module32Next(hSnapshot, &meModuleEntry));
-
-	CloseHandle(hSnapshot);
 }
 
-struct Item * PrintProcessList(HANDLE CONST hStdOut, Item *first) {
+
+struct Item * PrintProcessList(HANDLE CONST hStdOut, Item *process) {
 	Item* p;
-	PROCESSENTRY32 peProcessEntry;
+	PROCESSENTRY32 peProcessEntry; //Структура содержащая список процессов
 	TCHAR szBuff[1024];
 	DWORD dwTemp;
-	HANDLE CONST hSnapshot = CreateToolhelp32Snapshot(
-		TH32CS_SNAPPROCESS, 0);
+	HANDLE CONST hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0); //Cоздает снапшот запущенных процессов
 	if (INVALID_HANDLE_VALUE == hSnapshot) {
-		return first;
+		return process;
 	}
 	int i = 0;
-	peProcessEntry.dwSize = sizeof(PROCESSENTRY32);
-	Process32First(hSnapshot, &peProcessEntry);
+	peProcessEntry.dwSize = sizeof(PROCESSENTRY32);  //Set size of PROCESSENTRY32 structure
+	Process32First(hSnapshot, &peProcessEntry); //Receieve handle to the snapshot. Hendle to first element
 	do {
-		wsprintf(szBuff, L"=== %08X %s ===\r\n",
-			peProcessEntry.th32ProcessID, peProcessEntry.szExeFile);
+		wsprintf(szBuff, L"=== %08X %s ===\r\n", peProcessEntry.th32ProcessID);
+			//, peProcessEntry.szExeFile);
 		//WriteConsole(hStdOut, szBuff, lstrlen(szBuff), &dwTemp, NULL);
 
-		//wstring ws(peProcessEntry.szExeFile);
-		//string processName(ws.begin(), ws.end());
+		//wsprintf("=== %d %d ===\r\n", peProcessEntry.th32ProcessID, peProcessEntry.szExeFile);
 
+		//_tprintf(TEXT("\n Process ID = 0x%08X"), peProcessEntry.th32ProcessID);
 
+		wstring ws(peProcessEntry.szExeFile);
+		//std::string s(peProcessEntry.szExeFile);  //Variable s to store process exe name
+		string str(ws.begin(), ws.end());
 		if (i == 0)
 		{
-			first->PID = peProcessEntry.th32ProcessID;
-			first->PPID = peProcessEntry.th32ParentProcessID;
-		
-			//TODO Fix
-			//first->name = processName;
-			first->next = NULL;
+			process->PID = peProcessEntry.th32ProcessID;
+			process->PPID = peProcessEntry.th32ParentProcessID;
+			process->name = str;
+			process->next = NULL;
 			i = 1;
-
 		}
 		else 
 		{
 			p = new Item;
 			p->PID = peProcessEntry.th32ProcessID;
 			p->PPID = peProcessEntry.th32ParentProcessID;
-			p->next = first;
-			first = p;
+			p->name = str;
+			p->next = process;
+			process = p;
 		}
-		//PrintModuleList(hStdOut, peProcessEntry.th32ProcessID);
-	} while (Process32Next(hSnapshot, &peProcessEntry));
+	}
+	while (Process32Next(hSnapshot, &peProcessEntry)); //Move handle to next element
 
-	CloseHandle(hSnapshot);
-	return (first);
+	CloseHandle(hSnapshot); //Closes an open object handle
+	return (process);
 
 }
 
-struct procesElement
+BOOL processInList(Item* lst, DWORD pid)
 {
-	DWORD PID; //PID process
-	DWORD PPID; //Parent PID process
-	std::string name; //Name of process
-	struct procesElement* tail; // указатель на следующий элемент
-	procesElement() {}
-	procesElement(DWORD a) { PID = a;}
-	procesElement(DWORD a, DWORD b) { PID = a; PPID = b; };
-	procesElement(DWORD p, DWORD pp, procesElement* t) { PID = p; PPID = pp, tail = t; };
-
-};
-
-
-struct procesElement * init(DWORD pid) // а- значение первого узла
-{
-	struct procesElement* procesElement;
-	// выделение памяти под корень списка
-	procesElement = (struct procesElement*)malloc(sizeof(struct procesElement));
-	procesElement->PID = pid;
-	procesElement->tail = NULL; // это последний узел списка
-	return(procesElement);
-}
-
-void listprint(Item* lst, DWORD curentpid, int count)
-{
-	struct Item* p;
+	struct Item* p;  //handle for fist element of list
 	p = lst;
-	
+
+	do
+	{
+		if (pid == p->PID)
+			return true;
+		p = p->next;
+	} 
+	while (p != NULL);
+	return false;
+}
+
+BOOL listprint(Item* lst, DWORD curentpid, int count, int line)
+{
+	struct Item* p;  //handle for fist element of list
+	p = lst;
+	//printf("curent pid %d cpace %d \n", curentpid, count);
 	do 
 	{
-		if (p->PPID == curentpid)
+		if (p->isPrinted == 0 &&  p->PPID == curentpid)
 		{
 			for (int i = 0; i <= count; i++)
 			{
 				printf(" ");
 			}
-			printf("%d %d \n", p->PID, p->PPID); // вывод значения элемента p
-			listprint(lst, p->PID, count + 1);
+			//printf("%d %d %s\n", p->PID, p->PPID, p->name);
+			printf("%d  %s\n", p->PID,  p->name);
+			line++;
+			p->isPrinted = 1;
+			listprint(lst, p->PID, count + 1, line);
 		}
-		p = p->next; // переход к следующему узлу
+		if (p->isPrinted == 0 && !processInList(lst, p->PPID))
+		{
+			//printf("%d %d %s\n", p->PID, p->PPID, p->name);
+			printf("%d %s\n", p->PID, p->name);
+			line++;
+			p->isPrinted = 1;
+			listprint(lst, p->PID, 0, line);
+			
+		}
+		p = p->next; //Move handle to next element
 	} while (p != NULL);
+	return 0;
 }
 
 int main(void)
 {
 	//Item* first = 0; //Указатель на начало списка
 	Item* first = (struct Item*)malloc(sizeof(struct Item));
-	Item* p;
-	int i;
 	std::string name;
 
 	HANDLE CONST hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
 	first = PrintProcessList(hStdOut, first);
 
-	listprint(first, 0, 0);
+
+	//_tprintf(TEXT("\n WARNING: %s failed with error %d (%s)"), L"aa", 11, L"02");
+
+	listprint(first, 0, 0, 0);
+
 
 
 	ExitProcess(0);
