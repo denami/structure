@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h> 
 
+
 using namespace std;
 
 #define MAX_LINES 20
@@ -12,9 +13,8 @@ using namespace std;
 struct Item {
 	DWORD PID;          //PID process
 	DWORD PPID;         //Parent PID process
-	string name;        //Process exe file
 	int isPrinted = 0;  //Flag for marck process ass displaed
-
+	WCHAR name[MAX_PATH];//Process exe file
 	Item* next;         //handle to nex Item
 };
 
@@ -85,8 +85,6 @@ void displayMeny()
 struct Item * PrintProcessList(Item *process) {
 	Item* p;
 	PROCESSENTRY32 peProcessEntry; //Structure stored prosess list
-	TCHAR szBuff[1024];
-	DWORD dwTemp;
 	HANDLE CONST hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0); //Take snapshot for runned processes
 	if (INVALID_HANDLE_VALUE == hSnapshot) {
 		return process;
@@ -97,14 +95,11 @@ struct Item * PrintProcessList(Item *process) {
 	do {
 		DWORD PID = peProcessEntry.th32ProcessID;
 		DWORD PPID = peProcessEntry.th32ParentProcessID;
-		wstring ws(peProcessEntry.szExeFile);
-		string str(ws.begin(), ws.end());
-		
 		if (i == 0)  //Check for first iteration
 		{
 			process->PID = PID;
 			process->PPID = PPID;
-			process->name = str;
+			copy(begin(peProcessEntry.szExeFile), end(peProcessEntry.szExeFile), begin(process->name));
 			process->next = NULL;
 			i = 1;
 		}
@@ -113,7 +108,7 @@ struct Item * PrintProcessList(Item *process) {
 			p = new Item; //Create new Item
 			p->PID = PID;
 			p->PPID = PPID;
-			p->name = str;
+			copy(begin(peProcessEntry.szExeFile), end(peProcessEntry.szExeFile), begin(p->name));
 			p->next = process; //Set handle for current Item
 			process = p;       //Set hendle to new Item
 		}
@@ -121,7 +116,7 @@ struct Item * PrintProcessList(Item *process) {
 	while (Process32Next(hSnapshot, &peProcessEntry)); //Move handle to next element
 
 	CloseHandle(hSnapshot); //Closes an open object handle
-	return (process);
+	return (process);       //Return handle to first Item in list
 
 }
 
@@ -144,6 +139,11 @@ BOOL listprint(Item* lst, DWORD curentpid, int count, int line)
 {
 	struct Item* p;  //handle for fist element of list
 	p = lst;         //Counter for printed lines
+
+	TCHAR szBuff[1024];
+	DWORD dwTemp;
+	HANDLE CONST hStdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+
 	do 
 	{
 		if (p->isPrinted == 0 &&  p->PPID == curentpid)
@@ -152,18 +152,19 @@ BOOL listprint(Item* lst, DWORD curentpid, int count, int line)
 			{
 				printf(" ");
 			}
-			printf("%d  %s\n", p->PID,  p->name);
+			wsprintf(szBuff, L"%d  %s\n", p->PID, p->name);
+			WriteConsole(hStdOut, szBuff, lstrlen(szBuff), &dwTemp, NULL);
 			line++;
 			p->isPrinted = 1;
 			listprint(lst, p->PID, count + 1, 0); //Print  #MAX_LINES for each
 		}
 		if (p->isPrinted == 0 && !processInList(lst, p->PPID))
 		{
-			printf("%d %s\n", p->PID, p->name);
+			wsprintf(szBuff, L"%d  %s\n", p->PID, p->name);
+			WriteConsole(hStdOut, szBuff, lstrlen(szBuff), &dwTemp, NULL);
 			line++;
 			p->isPrinted = 1;
-			listprint(lst, p->PID, 0, 0);
-			
+			listprint(lst, p->PID, 1, 0);   //1 setted because next element will be child for current
 		}
 		if (line == MAX_LINES)
 		{
